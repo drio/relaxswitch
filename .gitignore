@@ -6,3 +6,8 @@ node_modules
 *.vim
 .env*
 *.mp4
+bin
+node_modules
+*.vim
+.env*
+*.mp4
