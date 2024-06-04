@@ -1,0 +1,9 @@
+#!/bin/bash
+# vim :set ft=bash:
+
+set -e
+while :; do
+	export $(grep -v '^#' .env | xargs)
+	MQTT_PASS=$MQTT_PASS ./relax-switch.linux.arm64 
+        sleep 10
+done
