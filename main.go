@@ -53,8 +53,7 @@ func startMQTT(pass string) {
 	mqtt.ERROR = log.New(os.Stdout, "", 0)
 	hostname, _ := os.Hostname()
 
-	//url := "tcp://192.168.8.180:1883"
-	url := "tcp://gopher:1883"
+	url := "tcp://192.168.8.180:1883"
 	user := "shelly"
 	topic := "shellies/shelly1l-test/relay/0"
 

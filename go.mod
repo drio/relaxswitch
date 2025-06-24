@@ -1,4 +1,4 @@
-module github.com/drio/relax-switch
+module github.com/drio/relaxswitch
 
 go 1.22.3
 
