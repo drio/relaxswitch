@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +16,9 @@ import (
 	"github.com/hajimehoshi/go-mp3"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
+
+//go:embed enigma.mp3
+var enigmaMP3 []byte
 
 var (
 	otoCtx *oto.Context
@@ -63,14 +67,9 @@ func stopAudio() {
 	}
 }
 
-func playMP3(filename string, skipSeconds int) error {
-	log.Printf("playMP3: reading file %s", filename)
-	fileBytes, err := os.ReadFile(filename)
-	if err != nil {
-		return fmt.Errorf("failed to read file: %w", err)
-	}
-
-	fileBytesReader := bytes.NewReader(fileBytes)
+func playEmbeddedMP3(skipSeconds int) error {
+	log.Printf("playEmbeddedMP3: using embedded MP3 data")
+	fileBytesReader := bytes.NewReader(enigmaMP3)
 	decoder, err := mp3.NewDecoder(fileBytesReader)
 	if err != nil {
 		return fmt.Errorf("failed to create MP3 decoder: %w", err)
@@ -129,7 +128,7 @@ func startMQTT(user, pass, url, topic string) {
 		case "on":
 			log.Println("msg: on")
 			stopAudio()
-			if err := playMP3("./enigma.mp3", 26); err != nil {
+			if err := playEmbeddedMP3(26); err != nil {
 				log.Printf("error playing song: %s", err)
 			}
 		case "off":
