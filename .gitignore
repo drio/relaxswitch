@@ -13,3 +13,4 @@ node_modules
 *.mp4
 bin
 main
+test-player/test-player
