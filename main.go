@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ebitengine/oto/v3"
+	"github.com/anisse/alsa"
 	"github.com/hajimehoshi/go-mp3"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
@@ -21,8 +21,7 @@ import (
 var enigmaMP3 []byte
 
 var (
-	otoCtx *oto.Context
-	player *oto.Player
+	player *alsa.Player
 )
 
 func main() {
@@ -76,37 +75,43 @@ func playEmbeddedMP3(skipSeconds int) error {
 	}
 	log.Printf("playMP3: decoder created, sample rate: %d", decoder.SampleRate())
 
-	if otoCtx == nil {
-		log.Printf("playMP3: creating audio context")
-		op := &oto.NewContextOptions{
-			SampleRate:   44100,
-			ChannelCount: 2,
-			Format:       oto.FormatSignedInt16LE,
-		}
-		
-		var readyChan chan struct{}
-		otoCtx, readyChan, err = oto.NewContext(op)
-		if err != nil {
-			return fmt.Errorf("failed to create audio context: %w", err)
-		}
-		log.Printf("playMP3: waiting for audio context to be ready")
-		<-readyChan
-		log.Printf("playMP3: audio context ready")
-	}
+	sampleRate := decoder.SampleRate()
+	channels := 2
+	bytesPerSample := 2 // 16-bit PCM
 
 	// Skip audio if needed
 	if skipSeconds > 0 {
-		skipBytes := int64(skipSeconds) * int64(decoder.SampleRate()) * 4 // 2 channels * 2 bytes per sample
-		_, err = io.CopyN(io.Discard, decoder, skipBytes)
-		if err != nil && err != io.EOF {
+		skipBytes := int64(skipSeconds) * int64(sampleRate) * int64(channels) * int64(bytesPerSample)
+		_, err = decoder.Seek(skipBytes, io.SeekStart)
+		if err != nil {
 			return fmt.Errorf("failed to skip audio: %w", err)
 		}
 	}
 
-	log.Printf("playMP3: creating player")
-	player = otoCtx.NewPlayer(decoder)
+	log.Printf("playMP3: creating ALSA player")
+	player, err = alsa.NewPlayer(sampleRate, channels, bytesPerSample, 4096)
+	if err != nil {
+		return fmt.Errorf("failed to create ALSA player: %w", err)
+	}
+
 	log.Printf("playMP3: starting playback")
-	player.Play()
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := decoder.Read(buf)
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Printf("decoder read error: %v", err)
+				break
+			}
+			if _, err := player.Write(buf[:n]); err != nil {
+				log.Printf("player write error: %v", err)
+				break
+			}
+		}
+	}()
 
 	return nil
 }

@@ -3,6 +3,7 @@ module github.com/drio/relaxswitch
 go 1.24.4
 
 require (
+	github.com/anisse/alsa v0.0.0-20190130210209-592d9b53603e
 	github.com/ebitengine/oto/v3 v3.3.3
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/hajimehoshi/go-mp3 v0.3.4
