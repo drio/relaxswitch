@@ -1,4 +1,4 @@
-PRJ=relax-switch
+PRJ=relaxswitch
 SS=pitest
 AUTH=-u $(MQTT_USER) -P $(MQTT_PASS)
 TOPIC=shellies/shelly1l-test/relay/0
