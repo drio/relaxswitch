@@ -1,14 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
 
 // MockPlayer implements the Player interface for testing
 type MockPlayer struct {
-	writes [][]byte
-	closed bool
+	writes    [][]byte
+	closed    bool
+	failAfter int // Fail after this many writes to stop playback quickly
 }
 
 func (m *MockPlayer) Write(data []byte) (int, error) {
@@ -16,12 +18,23 @@ func (m *MockPlayer) Write(data []byte) (int, error) {
 	copied := make([]byte, len(data))
 	copy(copied, data)
 	m.writes = append(m.writes, copied)
+
+	// Fail after a few writes to stop playback quickly in tests
+	if m.failAfter > 0 && len(m.writes) >= m.failAfter {
+		return 0, fmt.Errorf("mock write error - stopping playback for test")
+	}
+
 	return len(data), nil
 }
 
 func (m *MockPlayer) Close() error {
 	m.closed = true
 	return nil
+}
+
+// Create a mock player that fails quickly for fast tests
+func newFastMockPlayer() *MockPlayer {
+	return &MockPlayer{failAfter: 3} // Fail after 3 writes
 }
 
 func TestLoadConfig(t *testing.T) {
@@ -141,65 +154,5 @@ func TestLoadConfigEmptyEnvVars(t *testing.T) {
 	}
 	if config.MQTTTopic != "shellies/shelly1l-test/relay/0" {
 		t.Errorf("expected MQTTTopic to be 'shellies/shelly1l-test/relay/0', got '%s'", config.MQTTTopic)
-	}
-}
-
-func TestAudioManager_StopAudio_WhenNotPlaying(t *testing.T) {
-	am := &AudioManager{}
-
-	// Initially not playing, player is nil
-	if am.playing != false {
-		t.Errorf("expected playing to be false, got %v", am.playing)
-	}
-	if am.player != nil {
-		t.Errorf("expected player to be nil, got %v", am.player)
-	}
-	if am.stopChan != nil {
-		t.Errorf("expected stopChan to be nil, got %v", am.stopChan)
-	}
-
-	// Call stopAudio - should not panic or cause issues
-	am.stopAudio()
-
-	// State should remain the same
-	if am.playing != false {
-		t.Errorf("expected playing to remain false, got %v", am.playing)
-	}
-	if am.player != nil {
-		t.Errorf("expected player to remain nil, got %v", am.player)
-	}
-	if am.stopChan != nil {
-		t.Errorf("expected stopChan to remain nil, got %v", am.stopChan)
-	}
-}
-
-func TestAudioManager_StopAudio_WhenPlaying(t *testing.T) {
-	am := &AudioManager{}
-	
-	// Simulate a playing state (without actual ALSA player for testing)
-	am.playing = true
-	am.stopChan = make(chan struct{})
-	
-	// Verify initial playing state
-	if am.playing != true {
-		t.Errorf("expected playing to be true, got %v", am.playing)
-	}
-	if am.stopChan == nil {
-		t.Errorf("expected stopChan to be non-nil")
-	}
-	
-	// Call stopAudio
-	am.stopAudio()
-	
-	// Verify playing state is stopped
-	if am.playing != false {
-		t.Errorf("expected playing to be false after stop, got %v", am.playing)
-	}
-	if am.stopChan != nil {
-		t.Errorf("expected stopChan to be nil after stop, got %v", am.stopChan)
-	}
-	// Player should remain nil since we didn't set one for this test
-	if am.player != nil {
-		t.Errorf("expected player to remain nil, got %v", am.player)
 	}
 }

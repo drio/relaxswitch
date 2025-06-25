@@ -43,7 +43,7 @@ type AudioManager struct {
 	player        Player
 	playerFactory func() (Player, error)
 	playing       bool
-	stopChan      chan struct{}
+	doneChan      chan struct{}
 }
 
 func NewAudioManager(playerFactory func() (Player, error)) *AudioManager {
@@ -109,12 +109,16 @@ func loadConfig() Config {
 func (am *AudioManager) stopAudio() {
 	if am.playing {
 		am.playing = false
-		if am.stopChan != nil {
-			close(am.stopChan)
-			am.stopChan = nil
-		}
 		log.Printf("stopping audio playback")
 	}
+
+	// Wait for goroutine to finish
+	if am.doneChan != nil {
+		<-am.doneChan
+		am.doneChan = nil
+	}
+
+	// Close player
 	if am.player != nil {
 		am.player.Close()
 		am.player = nil
@@ -122,72 +126,85 @@ func (am *AudioManager) stopAudio() {
 	}
 }
 
-func (am *AudioManager) playEmbeddedMP3(skipSeconds int) error {
-	// Stop any existing playback first
-	am.stopAudio()
-
-	log.Printf("playEmbeddedMP3: using embedded MP3 data")
+func (am *AudioManager) createDecoder(skipSeconds int) (*mp3.Decoder, error) {
+	log.Printf("creating MP3 decoder from embedded data")
 	fileBytesReader := bytes.NewReader(enigmaMP3)
 	decoder, err := mp3.NewDecoder(fileBytesReader)
 	if err != nil {
-		return fmt.Errorf("failed to create MP3 decoder: %w", err)
+		return nil, fmt.Errorf("failed to create MP3 decoder: %w", err)
 	}
-	log.Printf("playMP3: decoder created, sample rate: %d", decoder.SampleRate())
-
-	sampleRate := decoder.SampleRate()
+	log.Printf("decoder created, sample rate: %d", decoder.SampleRate())
 
 	// Skip audio if needed
 	if skipSeconds > 0 {
+		sampleRate := decoder.SampleRate()
 		// Calculate bytes to skip: seconds * samples_per_second * channels * bytes_per_sample
 		// For stereo 16-bit audio: skipSeconds * sampleRate * 2 channels * 2 bytes
 		skipBytes := int64(skipSeconds) * int64(sampleRate) * int64(channels) * int64(bytesPerSample)
 		_, err = decoder.Seek(skipBytes, io.SeekStart)
 		if err != nil {
-			return fmt.Errorf("failed to skip audio: %w", err)
+			return nil, fmt.Errorf("failed to skip audio: %w", err)
 		}
 	}
 
-	log.Printf("playMP3: creating new player")
+	return decoder, nil
+}
+
+func (am *AudioManager) createPlayer() error {
+	log.Printf("creating new audio player")
 	player, err := am.playerFactory()
 	if err != nil {
 		return fmt.Errorf("failed to create player: %w", err)
 	}
 	am.player = player
+	return nil
+}
 
+func (am *AudioManager) startPlaybackGoroutine(decoder *mp3.Decoder) {
 	// Set up new playback session
 	am.playing = true
-	am.stopChan = make(chan struct{})
+	am.doneChan = make(chan struct{})
 
-	log.Printf("playMP3: starting playback")
+	log.Printf("starting playback goroutine")
 	go func() {
+		// Capture references to avoid race with stopAudio()
+		currentPlayer := am.player
+		currentDoneChan := am.doneChan
 		defer func() {
-			am.playing = false
+			close(currentDoneChan)
 		}()
 
 		buf := make([]byte, bufferSize)
-		for {
-			select {
-			case <-am.stopChan:
-				log.Printf("playback stopped by signal")
+		for am.playing {
+			n, err := decoder.Read(buf)
+			if err == io.EOF {
+				log.Printf("playback finished")
+				am.playing = false
 				return
-			default:
-				n, err := decoder.Read(buf)
-				if err == io.EOF {
-					log.Printf("playback finished")
-					return
-				}
-				if err != nil {
-					log.Printf("decoder read error: %v", err)
-					return
-				}
-				if _, err := am.player.Write(buf[:n]); err != nil {
-					log.Printf("player write error: %v", err)
-					return
-				}
+			}
+			if err != nil {
+				log.Printf("decoder read error: %v", err)
+				return
+			}
+			if _, err := currentPlayer.Write(buf[:n]); err != nil {
+				log.Printf("player write error: %v", err)
+				return
 			}
 		}
 	}()
+}
 
+func (am *AudioManager) playEmbeddedMP3(skipSeconds int) error {
+	decoder, err := am.createDecoder(skipSeconds)
+	if err != nil {
+		return err
+	}
+
+	if err := am.createPlayer(); err != nil {
+		return err
+	}
+
+	am.startPlaybackGoroutine(decoder)
 	return nil
 }
 
@@ -198,7 +215,7 @@ func createMessageHandler(am *AudioManager) mqtt.MessageHandler {
 		switch pl {
 		case "on":
 			log.Println("msg: on")
-			am.stopAudio()
+			am.stopAudio() // Stop any existing playback first
 			if err := am.playEmbeddedMP3(defaultSkipSeconds); err != nil {
 				log.Printf("error playing song: %s", err)
 			}
