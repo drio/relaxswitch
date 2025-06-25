@@ -34,10 +34,22 @@ type Config struct {
 	MQTTTopic string
 }
 
+type Player interface {
+	Write([]byte) (int, error)
+	Close() error
+}
+
 type AudioManager struct {
-	player   *alsa.Player
-	playing  bool
-	stopChan chan struct{}
+	player        Player
+	playerFactory func() (Player, error)
+	playing       bool
+	stopChan      chan struct{}
+}
+
+func NewAudioManager(playerFactory func() (Player, error)) *AudioManager {
+	return &AudioManager{
+		playerFactory: playerFactory,
+	}
 }
 
 func main() {
@@ -46,7 +58,12 @@ func main() {
 		log.Fatalf("no env var MQTT_PASS set")
 	}
 
-	audioManager := &AudioManager{}
+	// Create factory function for ALSA players
+	playerFactory := func() (Player, error) {
+		return alsa.NewPlayer(44100, channels, bytesPerSample, bufferSize)
+	}
+
+	audioManager := NewAudioManager(playerFactory)
 
 	log.Printf("starting service")
 	c := make(chan os.Signal, 1)
@@ -101,14 +118,14 @@ func (am *AudioManager) stopAudio() {
 	if am.player != nil {
 		am.player.Close()
 		am.player = nil
-		log.Printf("stopped audio playback")
+		log.Printf("closed audio player")
 	}
 }
 
 func (am *AudioManager) playEmbeddedMP3(skipSeconds int) error {
 	// Stop any existing playback first
 	am.stopAudio()
-	
+
 	log.Printf("playEmbeddedMP3: using embedded MP3 data")
 	fileBytesReader := bytes.NewReader(enigmaMP3)
 	decoder, err := mp3.NewDecoder(fileBytesReader)
@@ -130,11 +147,12 @@ func (am *AudioManager) playEmbeddedMP3(skipSeconds int) error {
 		}
 	}
 
-	log.Printf("playMP3: creating ALSA player")
-	am.player, err = alsa.NewPlayer(sampleRate, channels, bytesPerSample, bufferSize)
+	log.Printf("playMP3: creating new player")
+	player, err := am.playerFactory()
 	if err != nil {
-		return fmt.Errorf("failed to create ALSA player: %w", err)
+		return fmt.Errorf("failed to create player: %w", err)
 	}
+	am.player = player
 
 	// Set up new playback session
 	am.playing = true
@@ -145,7 +163,7 @@ func (am *AudioManager) playEmbeddedMP3(skipSeconds int) error {
 		defer func() {
 			am.playing = false
 		}()
-		
+
 		buf := make([]byte, bufferSize)
 		for {
 			select {

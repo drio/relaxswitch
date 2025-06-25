@@ -43,7 +43,7 @@ test:
 	go test -v *.go
 
 test/watch:
-	@ls *.go | entr -c -s 'go test -failfast -v ./*.go && notify "💚" || notify "🛑"'
+	@ls *.go | entr -c -s 'go test -failfast -v ./*.go && echo "💚" || echo "🛑"'
 
 pkg: go.mod 
 	go mod tidy
