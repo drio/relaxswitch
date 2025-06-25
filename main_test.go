@@ -156,3 +156,56 @@ func TestLoadConfigEmptyEnvVars(t *testing.T) {
 		t.Errorf("expected MQTTTopic to be 'shellies/shelly1l-test/relay/0', got '%s'", config.MQTTTopic)
 	}
 }
+
+func TestDoneChanSynchronization(t *testing.T) {
+	playerFactory := func() (Player, error) {
+		return newFastMockPlayer(), nil
+	}
+	am := NewAudioManager(playerFactory)
+	
+	// Start playback
+	if err := am.playEmbeddedMP3(0); err != nil {
+		t.Fatalf("failed to start playback: %v", err)
+	}
+	
+	// Verify goroutine is running
+	if !am.playing {
+		t.Error("expected playing to be true")
+	}
+	if am.doneChan == nil {
+		t.Error("expected doneChan to be set")
+	}
+	
+	// Capture the doneChan reference before stopping
+	doneChan := am.doneChan
+	
+	// Test that doneChan is NOT closed yet (goroutine still running)
+	select {
+	case <-doneChan:
+		t.Error("doneChan should not be closed while goroutine is running")
+	default:
+		// Expected - channel not closed yet
+	}
+	
+	// Stop audio - this should wait for goroutine to finish
+	am.stopAudio()
+	
+	// Verify doneChan was closed (indicating goroutine finished)
+	select {
+	case <-doneChan:
+		// Expected - channel should be closed now
+	default:
+		t.Error("doneChan should be closed after stopAudio completes")
+	}
+	
+	// Verify cleanup happened
+	if am.playing {
+		t.Error("expected playing to be false after stop")
+	}
+	if am.player != nil {
+		t.Error("expected player to be nil after stop")
+	}
+	if am.doneChan != nil {
+		t.Error("expected doneChan to be nil after stop")
+	}
+}

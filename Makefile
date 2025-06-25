@@ -3,7 +3,7 @@ SS=pitest
 AUTH=-u $(MQTT_USER) -P $(MQTT_PASS)
 TOPIC=shellies/shelly1l-test/relay/0
 
-.PHONY: rsync lint tidy checks vuln
+.PHONY: rsync lint tidy checks vuln coverage
 checks: lint vuln test
 
 vuln:
@@ -53,6 +53,10 @@ tidy: go.mod
 
 go.mod:
 	go mod init github.com/drio/$(PRJ)
+
+coverage:
+	go test -v -cover -coverprofile=c.out
+	go tool cover -func=c.out
 
 coverage/html:
 	go test -v -cover -coverprofile=c.out

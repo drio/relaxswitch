@@ -14,3 +14,4 @@ node_modules
 bin
 main
 test-player/test-player
+c.out

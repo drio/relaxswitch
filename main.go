@@ -150,15 +150,6 @@ func (am *AudioManager) createDecoder(skipSeconds int) (*mp3.Decoder, error) {
 	return decoder, nil
 }
 
-func (am *AudioManager) createPlayer() error {
-	log.Printf("creating new audio player")
-	player, err := am.playerFactory()
-	if err != nil {
-		return fmt.Errorf("failed to create player: %w", err)
-	}
-	am.player = player
-	return nil
-}
 
 func (am *AudioManager) startPlaybackGoroutine(decoder *mp3.Decoder) {
 	// Set up new playback session
@@ -195,14 +186,20 @@ func (am *AudioManager) startPlaybackGoroutine(decoder *mp3.Decoder) {
 }
 
 func (am *AudioManager) playEmbeddedMP3(skipSeconds int) error {
+	// Stop any existing playback first
+	am.stopAudio()
+
 	decoder, err := am.createDecoder(skipSeconds)
 	if err != nil {
 		return err
 	}
 
-	if err := am.createPlayer(); err != nil {
-		return err
+	log.Printf("creating new player")
+	player, err := am.playerFactory()
+	if err != nil {
+		return fmt.Errorf("failed to create player: %w", err)
 	}
+	am.player = player
 
 	am.startPlaybackGoroutine(decoder)
 	return nil
@@ -215,7 +212,6 @@ func createMessageHandler(am *AudioManager) mqtt.MessageHandler {
 		switch pl {
 		case "on":
 			log.Println("msg: on")
-			am.stopAudio() // Stop any existing playback first
 			if err := am.playEmbeddedMP3(defaultSkipSeconds); err != nil {
 				log.Printf("error playing song: %s", err)
 			}
