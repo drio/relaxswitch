@@ -159,7 +159,7 @@ func handleMQTTMessage(client mqtt.Client, msg mqtt.Message) {
 	}
 }
 
-func startMQTT(config Config) {
+func createMQTTClient(config Config) mqtt.Client {
 	//mqtt.DEBUG = log.New(os.Stdout, "", 0)
 	mqtt.ERROR = log.New(os.Stdout, "", 0)
 	hostname, _ := os.Hostname()
@@ -175,7 +175,11 @@ func startMQTT(config Config) {
 		}
 	}
 
-	c := mqtt.NewClient(opts)
+	return mqtt.NewClient(opts)
+}
+
+func startMQTT(config Config) {
+	c := createMQTTClient(config)
 	if token := c.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	} else {
