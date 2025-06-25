@@ -20,6 +20,13 @@ import (
 //go:embed enigma.mp3
 var enigmaMP3 []byte
 
+const (
+	defaultSkipSeconds = 26
+	bufferSize         = 4096
+	channels           = 2
+	bytesPerSample     = 2
+)
+
 var (
 	player *alsa.Player
 )
@@ -76,8 +83,6 @@ func playEmbeddedMP3(skipSeconds int) error {
 	log.Printf("playMP3: decoder created, sample rate: %d", decoder.SampleRate())
 
 	sampleRate := decoder.SampleRate()
-	channels := 2
-	bytesPerSample := 2 // 16-bit PCM
 
 	// Skip audio if needed
 	if skipSeconds > 0 {
@@ -89,14 +94,14 @@ func playEmbeddedMP3(skipSeconds int) error {
 	}
 
 	log.Printf("playMP3: creating ALSA player")
-	player, err = alsa.NewPlayer(sampleRate, channels, bytesPerSample, 4096)
+	player, err = alsa.NewPlayer(sampleRate, channels, bytesPerSample, bufferSize)
 	if err != nil {
 		return fmt.Errorf("failed to create ALSA player: %w", err)
 	}
 
 	log.Printf("playMP3: starting playback")
 	go func() {
-		buf := make([]byte, 4096)
+		buf := make([]byte, bufferSize)
 		for {
 			n, err := decoder.Read(buf)
 			if err == io.EOF {
@@ -133,7 +138,7 @@ func startMQTT(user, pass, url, topic string) {
 		case "on":
 			log.Println("msg: on")
 			stopAudio()
-			if err := playEmbeddedMP3(26); err != nil {
+			if err := playEmbeddedMP3(defaultSkipSeconds); err != nil {
 				log.Printf("error playing song: %s", err)
 			}
 		case "off":
