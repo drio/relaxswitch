@@ -141,6 +141,24 @@ func playEmbeddedMP3(skipSeconds int) error {
 	return nil
 }
 
+func handleMQTTMessage(client mqtt.Client, msg mqtt.Message) {
+	pl := string(msg.Payload())
+	log.Printf("MQTT message received: topic=%s payload='%s'", msg.Topic(), pl)
+	switch pl {
+	case "on":
+		log.Println("msg: on")
+		stopAudio()
+		if err := playEmbeddedMP3(defaultSkipSeconds); err != nil {
+			log.Printf("error playing song: %s", err)
+		}
+	case "off":
+		log.Println("msg: off")
+		stopAudio()
+	default:
+		log.Printf("unknown message payload: '%s'", pl)
+	}
+}
+
 func startMQTT(config Config) {
 	//mqtt.DEBUG = log.New(os.Stdout, "", 0)
 	mqtt.ERROR = log.New(os.Stdout, "", 0)
@@ -151,26 +169,8 @@ func startMQTT(config Config) {
 	opts.SetUsername(config.MQTTUser)
 	opts.SetPassword(config.MQTTPass)
 
-	onMessageReceived := (func(client mqtt.Client, msg mqtt.Message) {
-		pl := string(msg.Payload())
-		log.Printf("MQTT message received: topic=%s payload='%s'", msg.Topic(), pl)
-		switch pl {
-		case "on":
-			log.Println("msg: on")
-			stopAudio()
-			if err := playEmbeddedMP3(defaultSkipSeconds); err != nil {
-				log.Printf("error playing song: %s", err)
-			}
-		case "off":
-			log.Println("msg: off")
-			stopAudio()
-		default:
-			log.Printf("unknown message payload: '%s'", pl)
-		}
-	})
-
 	opts.OnConnect = func(c mqtt.Client) {
-		if token := c.Subscribe(config.MQTTTopic, 0, onMessageReceived); token.Wait() && token.Error() != nil {
+		if token := c.Subscribe(config.MQTTTopic, 0, handleMQTTMessage); token.Wait() && token.Error() != nil {
 			panic(token.Error())
 		}
 	}
