@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/anisse/alsa"
-	"github.com/hajimehoshi/go-mp3"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/hajimehoshi/go-mp3"
 )
 
 //go:embed enigma.mp3
@@ -32,6 +32,35 @@ type Config struct {
 	MQTTPass  string
 	MQTTURL   string
 	MQTTTopic string
+}
+
+type AudioManager struct {
+	player   *alsa.Player
+	playing  bool
+	stopChan chan struct{}
+}
+
+func main() {
+	config := loadConfig()
+	if config.MQTTPass == "" {
+		log.Fatalf("no env var MQTT_PASS set")
+	}
+
+	audioManager := &AudioManager{}
+
+	log.Printf("starting service")
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	log.Printf("starting mqtt client")
+	if err := startMQTT(config, audioManager); err != nil {
+		log.Fatalf("failed to start MQTT: %v", err)
+	}
+
+	log.Printf("waiting")
+	<-c
+	log.Println("Bye")
+	os.Exit(0)
 }
 
 func loadConfig() Config {
@@ -60,38 +89,26 @@ func loadConfig() Config {
 	return config
 }
 
-var (
-	player *alsa.Player
-)
-
-func main() {
-	config := loadConfig()
-	if config.MQTTPass == "" {
-		log.Fatalf("no env var MQTT_PASS set")
+func (am *AudioManager) stopAudio() {
+	if am.playing {
+		am.playing = false
+		if am.stopChan != nil {
+			close(am.stopChan)
+			am.stopChan = nil
+		}
+		log.Printf("stopping audio playback")
 	}
-
-	log.Printf("starting service")
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-
-	log.Printf("starting mqtt client")
-	startMQTT(config)
-
-	log.Printf("waiting")
-	<-c
-	log.Println("Bye")
-	os.Exit(0)
-}
-
-func stopAudio() {
-	if player != nil {
-		player.Close()
-		player = nil
+	if am.player != nil {
+		am.player.Close()
+		am.player = nil
 		log.Printf("stopped audio playback")
 	}
 }
 
-func playEmbeddedMP3(skipSeconds int) error {
+func (am *AudioManager) playEmbeddedMP3(skipSeconds int) error {
+	// Stop any existing playback first
+	am.stopAudio()
+	
 	log.Printf("playEmbeddedMP3: using embedded MP3 data")
 	fileBytesReader := bytes.NewReader(enigmaMP3)
 	decoder, err := mp3.NewDecoder(fileBytesReader)
@@ -114,26 +131,41 @@ func playEmbeddedMP3(skipSeconds int) error {
 	}
 
 	log.Printf("playMP3: creating ALSA player")
-	player, err = alsa.NewPlayer(sampleRate, channels, bytesPerSample, bufferSize)
+	am.player, err = alsa.NewPlayer(sampleRate, channels, bytesPerSample, bufferSize)
 	if err != nil {
 		return fmt.Errorf("failed to create ALSA player: %w", err)
 	}
 
+	// Set up new playback session
+	am.playing = true
+	am.stopChan = make(chan struct{})
+
 	log.Printf("playMP3: starting playback")
 	go func() {
+		defer func() {
+			am.playing = false
+		}()
+		
 		buf := make([]byte, bufferSize)
 		for {
-			n, err := decoder.Read(buf)
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				log.Printf("decoder read error: %v", err)
-				break
-			}
-			if _, err := player.Write(buf[:n]); err != nil {
-				log.Printf("player write error: %v", err)
-				break
+			select {
+			case <-am.stopChan:
+				log.Printf("playback stopped by signal")
+				return
+			default:
+				n, err := decoder.Read(buf)
+				if err == io.EOF {
+					log.Printf("playback finished")
+					return
+				}
+				if err != nil {
+					log.Printf("decoder read error: %v", err)
+					return
+				}
+				if _, err := am.player.Write(buf[:n]); err != nil {
+					log.Printf("player write error: %v", err)
+					return
+				}
 			}
 		}
 	}()
@@ -141,25 +173,27 @@ func playEmbeddedMP3(skipSeconds int) error {
 	return nil
 }
 
-func handleMQTTMessage(client mqtt.Client, msg mqtt.Message) {
-	pl := string(msg.Payload())
-	log.Printf("MQTT message received: topic=%s payload='%s'", msg.Topic(), pl)
-	switch pl {
-	case "on":
-		log.Println("msg: on")
-		stopAudio()
-		if err := playEmbeddedMP3(defaultSkipSeconds); err != nil {
-			log.Printf("error playing song: %s", err)
+func createMessageHandler(am *AudioManager) mqtt.MessageHandler {
+	return func(client mqtt.Client, msg mqtt.Message) {
+		pl := string(msg.Payload())
+		log.Printf("MQTT message received: topic=%s payload='%s'", msg.Topic(), pl)
+		switch pl {
+		case "on":
+			log.Println("msg: on")
+			am.stopAudio()
+			if err := am.playEmbeddedMP3(defaultSkipSeconds); err != nil {
+				log.Printf("error playing song: %s", err)
+			}
+		case "off":
+			log.Println("msg: off")
+			am.stopAudio()
+		default:
+			log.Printf("unknown message payload: '%s'", pl)
 		}
-	case "off":
-		log.Println("msg: off")
-		stopAudio()
-	default:
-		log.Printf("unknown message payload: '%s'", pl)
 	}
 }
 
-func createMQTTClient(config Config) mqtt.Client {
+func createMQTTClient(config Config, messageHandler mqtt.MessageHandler) (mqtt.Client, error) {
 	//mqtt.DEBUG = log.New(os.Stdout, "", 0)
 	mqtt.ERROR = log.New(os.Stdout, "", 0)
 	hostname, _ := os.Hostname()
@@ -170,19 +204,25 @@ func createMQTTClient(config Config) mqtt.Client {
 	opts.SetPassword(config.MQTTPass)
 
 	opts.OnConnect = func(c mqtt.Client) {
-		if token := c.Subscribe(config.MQTTTopic, 0, handleMQTTMessage); token.Wait() && token.Error() != nil {
+		if token := c.Subscribe(config.MQTTTopic, 0, messageHandler); token.Wait() && token.Error() != nil {
 			panic(token.Error())
 		}
 	}
 
-	return mqtt.NewClient(opts)
+	return mqtt.NewClient(opts), nil
 }
 
-func startMQTT(config Config) {
-	c := createMQTTClient(config)
-	if token := c.Connect(); token.Wait() && token.Error() != nil {
-		panic(token.Error())
-	} else {
-		fmt.Printf("Connected to %s\n", config.MQTTURL)
+func startMQTT(config Config, am *AudioManager) error {
+	messageHandler := createMessageHandler(am)
+	c, err := createMQTTClient(config, messageHandler)
+	if err != nil {
+		return fmt.Errorf("failed to create MQTT client: %w", err)
 	}
+
+	if token := c.Connect(); token.Wait() && token.Error() != nil {
+		return fmt.Errorf("failed to connect to MQTT broker: %w", token.Error())
+	}
+
+	fmt.Printf("Connected to %s\n", config.MQTTURL)
+	return nil
 }
