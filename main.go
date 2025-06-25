@@ -21,35 +21,53 @@ import (
 var enigmaMP3 []byte
 
 const (
-	defaultSkipSeconds = 26
-	bufferSize         = 4096
-	channels           = 2
-	bytesPerSample     = 2
+	defaultSkipSeconds = 26   // seconds to skip at start of audio playback
+	bufferSize         = 4096 // buffer size for audio data chunks
+	channels           = 2    // stereo audio (left + right channels)
+	bytesPerSample     = 2    // 16-bit PCM audio samples
 )
+
+type Config struct {
+	MQTTUser  string
+	MQTTPass  string
+	MQTTURL   string
+	MQTTTopic string
+}
+
+func loadConfig() Config {
+	config := Config{
+		MQTTUser:  "shelly",
+		MQTTURL:   "tcp://192.168.8.180:1883",
+		MQTTTopic: "shellies/shelly1l-test/relay/0",
+	}
+
+	if pass := os.Getenv("MQTT_PASS"); pass != "" {
+		config.MQTTPass = pass
+	}
+
+	if user := os.Getenv("MQTT_USER"); user != "" {
+		config.MQTTUser = user
+	}
+
+	if url := os.Getenv("MQTT_URL"); url != "" {
+		config.MQTTURL = url
+	}
+
+	if topic := os.Getenv("MQTT_TOPIC"); topic != "" {
+		config.MQTTTopic = topic
+	}
+
+	return config
+}
 
 var (
 	player *alsa.Player
 )
 
 func main() {
-	pass := os.Getenv("MQTT_PASS")
-	if pass == "" {
+	config := loadConfig()
+	if config.MQTTPass == "" {
 		log.Fatalf("no env var MQTT_PASS set")
-	}
-
-	user := os.Getenv("MQTT_USER")
-	if user == "" {
-		user = "shelly"
-	}
-
-	url := os.Getenv("MQTT_URL")
-	if url == "" {
-		url = "tcp://192.168.8.180:1883"
-	}
-
-	topic := os.Getenv("MQTT_TOPIC")
-	if topic == "" {
-		topic = "shellies/shelly1l-test/relay/0"
 	}
 
 	log.Printf("starting service")
@@ -57,7 +75,7 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	log.Printf("starting mqtt client")
-	startMQTT(user, pass, url, topic)
+	startMQTT(config)
 
 	log.Printf("waiting")
 	<-c
@@ -86,6 +104,8 @@ func playEmbeddedMP3(skipSeconds int) error {
 
 	// Skip audio if needed
 	if skipSeconds > 0 {
+		// Calculate bytes to skip: seconds * samples_per_second * channels * bytes_per_sample
+		// For stereo 16-bit audio: skipSeconds * sampleRate * 2 channels * 2 bytes
 		skipBytes := int64(skipSeconds) * int64(sampleRate) * int64(channels) * int64(bytesPerSample)
 		_, err = decoder.Seek(skipBytes, io.SeekStart)
 		if err != nil {
@@ -121,15 +141,15 @@ func playEmbeddedMP3(skipSeconds int) error {
 	return nil
 }
 
-func startMQTT(user, pass, url, topic string) {
+func startMQTT(config Config) {
 	//mqtt.DEBUG = log.New(os.Stdout, "", 0)
 	mqtt.ERROR = log.New(os.Stdout, "", 0)
 	hostname, _ := os.Hostname()
 
 	id := hostname + strconv.Itoa(time.Now().Second())
-	opts := mqtt.NewClientOptions().AddBroker(url).SetClientID(id).SetCleanSession(true)
-	opts.SetUsername(user)
-	opts.SetPassword(pass)
+	opts := mqtt.NewClientOptions().AddBroker(config.MQTTURL).SetClientID(id).SetCleanSession(true)
+	opts.SetUsername(config.MQTTUser)
+	opts.SetPassword(config.MQTTPass)
 
 	onMessageReceived := (func(client mqtt.Client, msg mqtt.Message) {
 		pl := string(msg.Payload())
@@ -150,7 +170,7 @@ func startMQTT(user, pass, url, topic string) {
 	})
 
 	opts.OnConnect = func(c mqtt.Client) {
-		if token := c.Subscribe(topic, 0, onMessageReceived); token.Wait() && token.Error() != nil {
+		if token := c.Subscribe(config.MQTTTopic, 0, onMessageReceived); token.Wait() && token.Error() != nil {
 			panic(token.Error())
 		}
 	}
@@ -159,6 +179,6 @@ func startMQTT(user, pass, url, topic string) {
 	if token := c.Connect(); token.Wait() && token.Error() != nil {
 		panic(token.Error())
 	} else {
-		fmt.Printf("Connected to %s\n", url)
+		fmt.Printf("Connected to %s\n", config.MQTTURL)
 	}
 }
