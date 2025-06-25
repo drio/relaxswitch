@@ -162,12 +162,12 @@ func TestDoneChanSynchronization(t *testing.T) {
 		return newFastMockPlayer(), nil
 	}
 	am := NewAudioManager(playerFactory)
-	
+
 	// Start playback
 	if err := am.playEmbeddedMP3(0); err != nil {
 		t.Fatalf("failed to start playback: %v", err)
 	}
-	
+
 	// Verify goroutine is running
 	if !am.playing {
 		t.Error("expected playing to be true")
@@ -175,10 +175,10 @@ func TestDoneChanSynchronization(t *testing.T) {
 	if am.doneChan == nil {
 		t.Error("expected doneChan to be set")
 	}
-	
+
 	// Capture the doneChan reference before stopping
 	doneChan := am.doneChan
-	
+
 	// Test that doneChan is NOT closed yet (goroutine still running)
 	select {
 	case <-doneChan:
@@ -186,10 +186,10 @@ func TestDoneChanSynchronization(t *testing.T) {
 	default:
 		// Expected - channel not closed yet
 	}
-	
+
 	// Stop audio - this should wait for goroutine to finish
 	am.stopAudio()
-	
+
 	// Verify doneChan was closed (indicating goroutine finished)
 	select {
 	case <-doneChan:
@@ -197,7 +197,7 @@ func TestDoneChanSynchronization(t *testing.T) {
 	default:
 		t.Error("doneChan should be closed after stopAudio completes")
 	}
-	
+
 	// Verify cleanup happened
 	if am.playing {
 		t.Error("expected playing to be false after stop")
@@ -207,5 +207,76 @@ func TestDoneChanSynchronization(t *testing.T) {
 	}
 	if am.doneChan != nil {
 		t.Error("expected doneChan to be nil after stop")
+	}
+}
+
+// MockMessage implements the mqtt.Message interface for testing
+type MockMessage struct {
+	topic   string
+	payload []byte
+}
+
+func (m *MockMessage) Duplicate() bool   { return false }
+func (m *MockMessage) Qos() byte         { return 0 }
+func (m *MockMessage) Retained() bool    { return false }
+func (m *MockMessage) Topic() string     { return m.topic }
+func (m *MockMessage) MessageID() uint16 { return 0 }
+func (m *MockMessage) Payload() []byte   { return m.payload }
+func (m *MockMessage) Ack()              {}
+
+func TestDuplicateStateIgnored(t *testing.T) {
+	playerFactory := func() (Player, error) {
+		return newFastMockPlayer(), nil
+	}
+	am := NewAudioManager(playerFactory)
+
+	handler := createMessageHandler(am)
+
+	// Send first "on" message
+	msg1 := &MockMessage{topic: "test/topic", payload: []byte("on")}
+	handler(nil, msg1)
+
+	// Verify it was processed
+	if am.lastState != "on" {
+		t.Errorf("expected lastState to be 'on', got '%s'", am.lastState)
+	}
+	if !am.playing {
+		t.Error("expected playing to be true after first 'on' message")
+	}
+
+	// Send duplicate "on" message (should be ignored)
+	msg2 := &MockMessage{topic: "test/topic", payload: []byte("on")}
+	handler(nil, msg2)
+
+	// State should remain the same
+	if am.lastState != "on" {
+		t.Errorf("expected lastState to remain 'on', got '%s'", am.lastState)
+	}
+	if !am.playing {
+		t.Error("expected playing to remain true after duplicate 'on' message")
+	}
+
+	// Send "off" message
+	msg3 := &MockMessage{topic: "test/topic", payload: []byte("off")}
+	handler(nil, msg3)
+
+	// Verify state changed
+	if am.lastState != "off" {
+		t.Errorf("expected lastState to be 'off', got '%s'", am.lastState)
+	}
+	if am.playing {
+		t.Error("expected playing to be false after 'off' message")
+	}
+
+	// Send duplicate "off" message (should be ignored)
+	msg4 := &MockMessage{topic: "test/topic", payload: []byte("off")}
+	handler(nil, msg4)
+
+	// State should remain the same
+	if am.lastState != "off" {
+		t.Errorf("expected lastState to remain 'off', got '%s'", am.lastState)
+	}
+	if am.playing {
+		t.Error("expected playing to remain false after duplicate 'off' message")
 	}
 }

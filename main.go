@@ -44,6 +44,7 @@ type AudioManager struct {
 	playerFactory func() (Player, error)
 	playing       bool
 	doneChan      chan struct{}
+	lastState     string
 }
 
 func NewAudioManager(playerFactory func() (Player, error)) *AudioManager {
@@ -150,7 +151,6 @@ func (am *AudioManager) createDecoder(skipSeconds int) (*mp3.Decoder, error) {
 	return decoder, nil
 }
 
-
 func (am *AudioManager) startPlaybackGoroutine(decoder *mp3.Decoder) {
 	// Set up new playback session
 	am.playing = true
@@ -209,15 +209,25 @@ func createMessageHandler(am *AudioManager) mqtt.MessageHandler {
 	return func(client mqtt.Client, msg mqtt.Message) {
 		pl := string(msg.Payload())
 		log.Printf("MQTT message received: topic=%s payload='%s'", msg.Topic(), pl)
+
+		// The shelly sends heartbeats with the same topic and value
+		if pl == am.lastState {
+			log.Printf("same state received (%s), ignoring", pl)
+			return
+		}
+
 		switch pl {
 		case "on":
 			log.Println("msg: on")
 			if err := am.playEmbeddedMP3(defaultSkipSeconds); err != nil {
 				log.Printf("error playing song: %s", err)
+			} else {
+				am.lastState = "on"
 			}
 		case "off":
 			log.Println("msg: off")
 			am.stopAudio()
+			am.lastState = "off"
 		default:
 			log.Printf("unknown message payload: '%s'", pl)
 		}
