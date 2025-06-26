@@ -3,14 +3,20 @@ SS=pitest
 AUTH=-u $(MQTT_USER) -P $(MQTT_PASS)
 TOPIC=shellies/shelly1l-test/relay/0
 
-.PHONY: rsync lint tidy checks vuln coverage
-checks: lint vuln test
+.PHONY: rsync lint tidy checks vuln coverage fmt vet
+checks: fmt vet lint vuln test
 
 vuln:
 	govulncheck ./...
 
 vuln/verbose:
 	govulncheck -show verbose ./...
+
+fmt:
+	go fmt ./...
+
+vet:
+	go vet ./...
 
 lint:
 	golangci-lint run

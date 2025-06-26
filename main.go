@@ -1,5 +1,10 @@
 package main
 
+// We have a mqtt client that listens for topics with on and off payload.
+// The mqtt msg handlers run when we have new messages.
+// On the audio side of things we have the mp3 decoder and the alsa player.
+// All those are encapsulated within the audio manager.
+
 import (
 	"bytes"
 	_ "embed"
@@ -25,7 +30,7 @@ const (
 	bufferSize         = 4096 // buffer size for audio data chunks
 	channels           = 2    // stereo audio (left + right channels)
 	bytesPerSample     = 2    // 16-bit PCM audio samples
-	
+
 	// Config defaults
 	defaultMQTTUser  = "shelly"
 	defaultMQTTURL   = "tcp://192.168.8.180:1883"
