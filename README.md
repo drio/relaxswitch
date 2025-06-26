@@ -11,6 +11,10 @@ You can run this however you want but using
 
 More details in the [blog post](https://drio.sh/posts/relaxswitch-gokrazy).
 
-[![▶️ Watch Demo Video](https://i.vimeocdn.com/video/1864207650-9f215664dd077ad10c6a4655ce4f74381148f8eb4be7a45b424c590b39e03cbc-d?mw=400&q=70)](https://vimeo.com/953720166)
+## 🎥 Demo Video
+
+**[▶️ Click to watch the demo video](https://vimeo.com/953720166)**
+
+[![Demo Video Thumbnail](https://i.vimeocdn.com/video/1864207650-9f215664dd077ad10c6a4655ce4f74381148f8eb4be7a45b424c590b39e03cbc-d?mw=400&q=70)](https://vimeo.com/953720166)
 
 <img src="relaxswitch.webp" alt="Relax Switch" width="400">
