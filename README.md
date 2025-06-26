@@ -1,5 +1,7 @@
 # The Relax Switch
 
+A gokrazy appliance to enhance your bathroom experience.
+
 [![CI](https://github.com/drio/relaxswitch/actions/workflows/ci.yml/badge.svg)](https://github.com/drio/relaxswitch/actions/workflows/ci.yml)
 
 The Relax Switch is a fun little device that plays [pure
