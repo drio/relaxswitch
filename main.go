@@ -37,6 +37,7 @@ const (
 	defaultMQTTTopic = "shellies/shelly1l-test/relay/0"
 )
 
+// Config holds MQTT connection settings
 type Config struct {
 	MQTTUser  string
 	MQTTPass  string
@@ -44,11 +45,13 @@ type Config struct {
 	MQTTTopic string
 }
 
+// Player interface for audio playback devices
 type Player interface {
 	Write([]byte) (int, error)
 	Close() error
 }
 
+// AudioManager manages audio playback state and operations
 type AudioManager struct {
 	player        Player
 	playerFactory func() (Player, error)
@@ -57,6 +60,7 @@ type AudioManager struct {
 	lastState     string
 }
 
+// NewAudioManager creates a new AudioManager with the given player factory
 func NewAudioManager(playerFactory func() (Player, error)) *AudioManager {
 	return &AudioManager{
 		playerFactory: playerFactory,

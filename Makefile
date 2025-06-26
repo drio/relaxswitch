@@ -3,8 +3,9 @@ SS=pitest
 AUTH=-u $(MQTT_USER) -P $(MQTT_PASS)
 TOPIC=shellies/shelly1l-test/relay/0
 
-.PHONY: rsync lint tidy checks vuln coverage fmt vet
+.PHONY: rsync lint tidy checks vuln coverage fmt vet goreportcard
 checks: fmt vet lint vuln test
+goreportcard: gofmt gocyclo golint ineffassign misspell
 
 vuln:
 	govulncheck ./...
@@ -67,6 +68,26 @@ coverage:
 coverage/html:
 	go test -v -cover -coverprofile=c.out
 	go tool cover -html=c.out
+
+gofmt:
+	@echo "Checking gofmt..."
+	@test -z "$$(gofmt -l .)"
+
+gocyclo:
+	@echo "Checking cyclomatic complexity..."
+	@gocyclo -over 10 .
+
+golint:
+	@echo "Running golint..."
+	@golint -set_exit_status ./...
+
+ineffassign:
+	@echo "Checking for ineffectual assignments..."
+	@ineffassign ./...
+
+misspell:
+	@echo "Checking for misspellings..."
+	@misspell -error *.go
 
 clean:
 	rm -f c.out bin/*

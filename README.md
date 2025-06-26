@@ -1,7 +1,6 @@
 # The Relax Switch
 
 [![CI](https://github.com/drio/relaxswitch/actions/workflows/ci.yml/badge.svg)](https://github.com/drio/relaxswitch/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/drio/relaxswitch)](https://goreportcard.com/report/github.com/drio/relaxswitch)
 
 The Relax Switch is a fun little device that plays [pure
 moods](https://en.wikipedia.org/wiki/Pure_Moods) when someone turns on a light
