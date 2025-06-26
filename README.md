@@ -1,17 +1,16 @@
-# TODO
+# The Relax Switch
 
-- check for play
-- Load mqtt
-- START_DEF=26
-- set current position to START_DEF
-- ON: 
-    -> play from current pos
-- OFF: 
-    -> store position
-    -> stop cmd
-- If cmd stop/finishes, set position to start position
+[![CI](https://github.com/drio/relaxswitch/actions/workflows/ci.yml/badge.svg)](https://github.com/drio/relaxswitch/actions/workflows/ci.yml)
 
-## Improvements
+The Relax Switch is a fun little device that plays [pure
+moods](https://en.wikipedia.org/wiki/Pure_Moods) when someone turns on a light
+switch—perfect for surprising your guests when they walk into the bathroom. It
+runs on a Raspberry Pi using [gokrazy](https://gokrazy.org/quickstart/), a
+minimal Go-based operating system that turns your Pi into a single-purpose
+appliance. This makes the device lightweight, secure, and easy to update over
+the network.
 
-- Allow upload files
-- 
+[![CI](https://github.com/drio/relaxswitch/actions/workflows/ci.yml/badge.svg)](https://github.com/drio/relaxswitch/actions/workflows/ci.yml)
+
+More details in the [blog post](https://drio.sh/posts/relaxswitch-gokrazy).
+
