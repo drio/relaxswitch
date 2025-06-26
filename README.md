@@ -11,7 +11,5 @@ switch—perfect for surprising your guests when they walk into the bathroom.
 You can run this however you want but using
 [gokrazy](https://gokrazy.org/quickstart/) is the recommended way.
 
-[![CI](https://github.com/drio/relaxswitch/actions/workflows/ci.yml/badge.svg)](https://github.com/drio/relaxswitch/actions/workflows/ci.yml)
-
 More details in the [blog post](https://drio.sh/posts/relaxswitch-gokrazy).
 
