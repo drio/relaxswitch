@@ -25,6 +25,11 @@ const (
 	bufferSize         = 4096 // buffer size for audio data chunks
 	channels           = 2    // stereo audio (left + right channels)
 	bytesPerSample     = 2    // 16-bit PCM audio samples
+	
+	// Config defaults
+	defaultMQTTUser  = "shelly"
+	defaultMQTTURL   = "tcp://192.168.8.180:1883"
+	defaultMQTTTopic = "shellies/shelly1l-test/relay/0"
 )
 
 type Config struct {
@@ -83,9 +88,9 @@ func main() {
 
 func loadConfig() Config {
 	config := Config{
-		MQTTUser:  "shelly",
-		MQTTURL:   "tcp://192.168.8.180:1883",
-		MQTTTopic: "shellies/shelly1l-test/relay/0",
+		MQTTUser:  defaultMQTTUser,
+		MQTTURL:   defaultMQTTURL,
+		MQTTTopic: defaultMQTTTopic,
 	}
 
 	if pass := os.Getenv("MQTT_PASS"); pass != "" {
