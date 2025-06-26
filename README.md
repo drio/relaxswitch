@@ -1,6 +1,6 @@
 # The Relax Switch
 
-A gokrazy appliance to enhance your bathroom experience.
+A [gokrazy](https://gokrazy.org/quickstart/) appliance to enhance your bathroom experience.
 
 [![CI](https://github.com/drio/relaxswitch/actions/workflows/ci.yml/badge.svg)](https://github.com/drio/relaxswitch/actions/workflows/ci.yml)
 
